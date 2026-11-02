@@ -95,9 +95,39 @@
 - `push`와 `pull_request` 둘 다에서 돌린다: 브랜치 작업 중에도 깨짐을 바로 보고, PR에서는 머지 기준 상태로도 확인한다.
 - `cache: npm` 사용 이유: `actions/setup-node`가 lock 파일 해시로 npm 캐시를 복원해 설치 시간을 줄인다.
   캐시 키가 `package-lock.json` 해시라서 의존성이 바뀌면 자동으로 무효화되므로, `npm ci`의 재현성을 깨지 않는다.
-- Node 버전은 20으로 고정했다. `engines.node: ">=20"`이 하한이므로, CI는 **가장 낮은 지원 버전**에서 통과하는지를 본다.
+- CI가 어떤 Node에서 도는지는 10번 절에서 따로 정리했다(검사는 22/24 매트릭스, Node 20은 산출물 실행만 검증).
 
-## 10. 로컬 환경 주의: `NODE_ENV=production`
+## 10. Node 버전: 사용 조건과 개발 조건을 분리한다
+
+관찰한 사실(설치된 버전의 `engines.node`):
+
+| 패키지 | 요구 Node |
+| --- | --- |
+| `tsup@9.0.0` | `^22.18.0 \|\| ^24.11.0 \|\| >=26.0.0` |
+| `vitest@5.0.5` | `^22.12.0 \|\| ^24.0.0 \|\| >=26.0.0` |
+| `eslint@10.14.0` | `^20.19.0 \|\| ^22.13.0 \|\| >=24` |
+| 우리 패키지(`engines`) | `>=20` |
+
+즉 **개발 도구의 하한은 Node 22.18**인데 CI는 Node 20에서 돌고 있었다. 지금 깨지지 않더라도
+지원 밖 버전에서 검사를 돌린 셈이고, 도구가 새 문법·API를 쓰기 시작하면 CI에서만 터진다.
+
+- **`engines.node: ">=20"`은 유지한다.** 이 필드는 **빌드 산출물의 실행 조건**이다.
+  `dist/cli.js`는 런타임 의존성이 0개이고 `node:util`의 `parseArgs`, `node:fs/promises`, `import.meta.url`만 쓰므로
+  Node 20에서 문제없이 돈다. 개발 도구 사정 때문에 사용자에게 Node 22를 요구하는 것은 근거가 없다.
+- **검사는 Node 22/24 매트릭스에서 돌린다.** 22는 개발 도구의 하한(22.18+)이고, 24는 그다음 LTS다.
+  한 버전만 돌리면 "로컬은 24, CI는 22"처럼 버전 차이에서만 나는 문제를 놓친다.
+  `node-version: "22"`는 22.x 최신 패치를 받으므로 tsup의 `^22.18.0` 하한을 만족한다(그래서 `22.18`로 고정하지 않았다).
+  매트릭스에 20을 넣지 않은 이유: `npm ci`는 경고만 내고 통과하지만, 그 위에서 돌린 tsup/vitest 결과는 지원 밖이라 신뢰할 수 없다.
+- **`runtime-floor` job이 따로 필요한 이유**: 위 매트릭스는 `engines`의 하한을 전혀 검증하지 않는다.
+  산출물이 Node 20에서 안 돌면 `engines: ">=20"`은 거짓 광고가 된다. 그래서 빌드는 Node 22에서 하고,
+  같은 job에서 `setup-node`를 한 번 더 호출해 **실행만 Node 20으로 바꿔** `--help`와 `--version`을 실제로 돌린다.
+  job을 두 개로 쪼개면 `dist/`를 artifact로 올렸다 내려야 해서 더 복잡해진다.
+- `--version` 출력은 `package.json`의 값과 **문자열 비교**해서 다르면 job을 실패시킨다.
+  이 한 줄로 번들의 shebang, ESM 실행, `../package.json` 상대 경로(8번 절)가 Node 20에서도 유효한지 함께 확인된다.
+- `.npmrc`의 `engine-strict`는 켜지 않았다. 켜면 Node 20 환경에서 devDependencies 설치 자체가 막혀
+  `runtime-floor` job과 "Node 20 사용자" 시나리오가 둘 다 깨진다. 대신 이 구분을 README 표와 CI job 구성으로 드러냈다.
+
+## 11. 로컬 환경 주의: `NODE_ENV=production`
 
 - 이 PC에는 `NODE_ENV=production`이 전역으로 설정돼 있어, 그대로 `npm install`하면 devDependencies가 설치되지 않는다
   (npm이 `omit=dev`로 동작). 빈 `node_modules`로 린트/테스트가 안 돌면 이걸 먼저 의심한다.

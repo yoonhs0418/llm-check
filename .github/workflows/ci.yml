@@ -5,15 +5,52 @@ on:
   pull_request:
 
 jobs:
+  # 개발 도구(tsup, vitest)가 요구하는 Node에서 lint/typecheck/test를 돌린다.
   check:
+    name: check (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      # 한쪽이 깨져도 다른 버전 결과를 같이 보기 위해 중단하지 않는다.
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+
+  # engines.node의 하한(Node 20)에서 빌드 산출물이 실제로 실행되는지 확인한다.
+  # 빌드는 개발용 Node(22)에서 하고, 실행만 Node 20으로 바꿔서 검증한다.
+  runtime-floor:
+    name: dist on Node 20 (engines floor)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "22"
           cache: npm
 
       - run: npm ci
-      - run: npm run check
+      - run: npm run build
+
+      - name: Switch to Node 20 (runtime only)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Verify dist/cli.js runs on Node 20
+        run: |
+          node --version
+          node dist/cli.js --help
+          expected="$(node -p "require('./package.json').version")"
+          actual="$(node dist/cli.js --version)"
+          echo "package.json=$expected  dist/cli.js=$actual"
+          test "$expected" = "$actual"

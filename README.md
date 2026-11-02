@@ -8,8 +8,18 @@ LLM API를 호출하지 않는 **오프라인 도구**라서 실행에 네트워
 
 ## 요구 사항
 
-- Node.js 20 이상 (`package.json`의 `engines.node`로 명시)
-- npm
+Node 버전 요구 사항은 **사용(실행)** 과 **개발(기여)** 이 다릅니다.
+
+| 용도 | 필요한 Node | 근거 |
+| --- | --- | --- |
+| 사용 (빌드된 CLI 실행) | **20 이상** | `package.json`의 `engines.node: ">=20"` |
+| 개발 (빌드·린트·테스트) | **22.18 이상** (또는 24.11+) | 개발 도구 `tsup@9`, `vitest@5`가 요구하는 하한 |
+
+빌드 산출물 `dist/cli.js`는 외부 의존성이 없고 Node 20 표준 API만 쓰므로 Node 20에서 실행됩니다.
+반면 `npm run check` / `npm run build`는 Node 22.18+ 가 필요합니다. 자세한 이유는
+[docs/DECISIONS.md](docs/DECISIONS.md)의 "Node 버전" 절에 있습니다.
+
+- npm (`package-lock.json` 사용)
 
 ## 설치
 
