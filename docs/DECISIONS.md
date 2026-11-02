@@ -308,7 +308,21 @@ LLM에게 빈칸 문항과 문항 유형 라벨(kind)을 함께 받았는데, �
 - 2-gram을 셀 때는 `Array.from()`으로 **코드 포인트** 단위로 쪼갠다. 파이썬 `str` 순회가 코드 포인트 단위이므로 같은 결과가 나온다
   (`text[i]`로 돌면 UTF-16 코드 유닛이라 이모지·보조 평면 문자에서 달라진다).
 
-## 15. 로컬 환경 주의: `NODE_ENV=production`
+## 15. 설치 시 빌드: `prepare`
+
+- npm에 배포하지 않았고 `dist/`는 git에 올리지 않는다(빌드 산출물을 저장소에 두면 커밋마다 diff가 생기고, 소스와 어긋날 수 있다).
+  그래서 git URL로 설치하면 받는 쪽에 실행할 파일이 없다. `npm install github:...`이 `bin`을 찾지 못해 실패한다.
+- `"prepare": "npm run build"`를 넣으면 npm이 git 설치 과정에서(클론 → 의존성 설치 → `prepare` → pack) 빌드를 돌려 `dist/cli.js`를 만든다.
+  `npm pack`으로 확인했다: `dist/`를 지운 상태에서 pack해도 패키지에 `dist/cli.js`가 들어간다.
+- **부작용 1 — `npm ci`와 `npm install`에서도 빌드가 돈다.** CI의 `check` job은 검사만 하면 되는데 설치 단계에서 빌드까지 한다
+  (현재 tsup 빌드가 20ms 수준이라 그냥 받아들였다). 로컬에서 `npm install` 후 따로 `npm run build`를 하지 않아도 되는 건 이득이다.
+- **부작용 2 — 설치하는 쪽에 개발 조건(Node 22.18+)이 필요하다.** 설치 시점에 tsup이 돌기 때문이다(10번 절).
+  빌드된 `dist/cli.js`를 실행하는 것 자체는 Node 20에서 되므로 `engines`는 그대로 `>=20`으로 둔다.
+- **부작용 3 — `NODE_ENV=production`에서는 `npm install`이 실패한다.** omit=dev가 devDependencies를 정리한 뒤 `prepare`가 돌아
+  tsup을 찾지 못한다(16절). 조용히 devDependencies를 건너뛰던 이전보다 시끄럽게 실패하는 쪽이 낫지만, 이 환경에서는
+  `NODE_ENV=development npm install`을 써야 한다.
+
+## 16. 로컬 환경 주의: `NODE_ENV=production`
 
 - 이 PC에는 `NODE_ENV=production`이 전역으로 설정돼 있어, 그대로 `npm install`하면 devDependencies가 설치되지 않는다
   (npm이 `omit=dev`로 동작). 빈 `node_modules`로 린트/테스트가 안 돌면 이걸 먼저 의심한다.

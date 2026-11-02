@@ -1,7 +1,7 @@
 {
   "name": "llm-check",
   "version": "0.1.0",
-  "description": "LLM이 만들어 낸 출력 파일을 오프라인에서 검사하는 CLI (프로젝트 뼈대 단계)",
+  "description": "LLM 출력 파일을 오프라인에서 검사하는 CLI — JSON 추출·스키마 검증(validate), 정의문 복사 판정(overlap)",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -16,6 +16,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "prepare": "npm run build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
