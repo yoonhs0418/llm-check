@@ -14,24 +14,7 @@ import { parseSchema } from "../core/schema.js";
 import type { SchemaError } from "../core/schema.js";
 import { validate } from "../core/validate.js";
 import type { ValidationError } from "../core/validate.js";
-
-/** 바깥 세계(파일 시스템, 표준 입력)와 닿는 부분. 테스트에서는 메모리 구현을 넣는다. */
-export interface ValidateIo {
-  /** 읽지 못하면 reject한다(없는 파일, 권한 등). */
-  readFile(path: string): Promise<string>;
-  readStdin(): Promise<string>;
-}
-
-/**
- * 0: 통과 / 1: 검사 실패(LLM 출력이 기준 미달) / 2: 도구 사용·입출력·스키마 오류
- */
-export type ExitCode = 0 | 1 | 2;
-
-export interface RunResult {
-  readonly exitCode: ExitCode;
-  readonly stdout: string;
-  readonly stderr: string;
-}
+import type { CommandIo, RunResult } from "./io.js";
 
 interface JsonExtractOk {
   readonly ok: true;
@@ -125,7 +108,7 @@ function renderSchemaErrors(schemaPath: string, errors: readonly SchemaError[]):
   ].join("\n");
 }
 
-export async function runValidate(args: readonly string[], io: ValidateIo): Promise<RunResult> {
+export async function runValidate(args: readonly string[], io: CommandIo): Promise<RunResult> {
   let inputPath: string;
   let schemaPath: string;
   let asJson: boolean;

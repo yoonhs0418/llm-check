@@ -2,8 +2,9 @@ import { readFile } from "node:fs/promises";
 import { text } from "node:stream/consumers";
 import { parseArgs } from "node:util";
 
+import type { CommandIo } from "./commands/io.js";
+import { runOverlap } from "./commands/overlap.js";
 import { runValidate } from "./commands/validate.js";
-import type { ValidateIo } from "./commands/validate.js";
 import { readPackageVersion } from "./commands/version.js";
 import { renderHelp } from "./core/help.js";
 
@@ -15,7 +16,7 @@ import { renderHelp } from "./core/help.js";
 const packageJsonUrl = new URL("../package.json", import.meta.url);
 
 /** 실제 파일 시스템·표준 입력에 연결한 io. 명령 로직(src/commands)은 이 인터페이스만 본다. */
-const nodeIo: ValidateIo = {
+const nodeIo: CommandIo = {
   readFile: (path) => readFile(path, "utf8"),
   readStdin: () => text(process.stdin),
 };
@@ -42,8 +43,11 @@ const argv = process.argv.slice(2);
 
 // process.exit()를 쓰지 않고 exitCode만 설정한다.
 // 파이프로 출력할 때 exit()가 쓰기 중인 stdout을 잘라먹을 수 있다.
-if (argv[0] === "validate") {
-  const result = await runValidate(argv.slice(1), nodeIo);
+const command = argv[0];
+
+if (command === "validate" || command === "overlap") {
+  const run = command === "validate" ? runValidate : runOverlap;
+  const result = await run(argv.slice(1), nodeIo);
   if (result.stdout !== "") {
     process.stdout.write(result.stdout);
   }

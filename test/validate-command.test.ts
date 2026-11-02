@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { JsonReport, ValidateIo } from "../src/commands/validate.js";
+import type { CommandIo } from "../src/commands/io.js";
+import type { JsonReport } from "../src/commands/validate.js";
 import { runValidate } from "../src/commands/validate.js";
 
 const schemaJson = JSON.stringify({
@@ -26,7 +27,7 @@ const badOutput = '결과: { "score": 132, "keywords": ["성장"] }';
 const brokenOutput = '결과: { "score": 71, "keywords": ["성장",';
 
 /** 파일 시스템과 표준 입력을 메모리로 대체한 io. 실제 파일 없이 명령을 돌린다. */
-function makeIo(files: Readonly<Record<string, string>>, stdin = ""): ValidateIo {
+function makeIo(files: Readonly<Record<string, string>>, stdin = ""): CommandIo {
   return {
     readFile: (path) => {
       const content = files[path];

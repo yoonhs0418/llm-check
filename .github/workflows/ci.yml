@@ -87,6 +87,10 @@ jobs:
           run_case 2 "--schema 누락 (사용법 오류)" node dist/cli.js validate examples/output-ok.txt
           run_case 0 "--help" node dist/cli.js --help
 
+          run_case 1 "questions.json (copied 1 > 허용치 0)" node dist/cli.js overlap examples/questions.json
+          run_case 0 "questions.json --max-copied 1" node dist/cli.js overlap examples/questions.json --max-copied 1
+          run_case 2 "overlap 없는 문항 파일 (입출력 오류)" node dist/cli.js overlap examples/nope.json
+
           # 종료 코드가 0이나 1이면 stdout은 유효한 JSON이어야 한다(--json 규약).
           code=0
           report="$(node dist/cli.js validate examples/output-bad.txt --schema "$schema" --json)" || code=$?

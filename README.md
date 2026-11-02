@@ -6,7 +6,9 @@ LLM API를 호출하지 않는 **오프라인 도구**라서 실행에 네트워
 LLM 응답에서 첫 JSON 블록을 꺼내고(설명 문장이나 ` ```json ` 코드펜스가 섞여 있어도),
 JSON Schema의 작은 부분집합으로 그 값이 기대한 모양인지 검사합니다.
 
-> 현재 제공하는 명령은 `validate` 하나입니다. 런타임 의존성은 0개입니다.
+명령은 두 개입니다 — `validate`(JSON 추출 + 스키마 검사)와 `overlap`(문항이 정의문을 되읽는지 판정).
+
+> 런타임 의존성은 0개입니다.
 
 ## 요구 사항
 
@@ -158,6 +160,94 @@ JSON Schema 전체가 아니라 아래 부분집합만 지원하며, **모르는
 `additionalProperties`(`false`만), `items`(단일 스키마), `enum`(원시값),
 `minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, `maxItems`
 
+## overlap — 문항이 정의문을 되읽는지 재기
+
+```bash
+llm-check overlap <문항파일> [--threshold 0.6] [--blank ____] [--max-copied 0] [--json]
+```
+
+빈칸 문항이 정의문을 그대로 옮겨 적은 것인지 **글자 2-gram 겹침**으로 잽니다.
+
+```
+overlap(정의문, 문항) = |정의문의 2-gram ∩ 문항의 2-gram| / |정의문의 2-gram|
+```
+
+이 값이 `--threshold` 이상이면 `copied`입니다. 방향이 있습니다 — "정의문이 문항에 얼마나 담겼는지"를 재며, 그 반대가 아닙니다.
+
+> 출처: MetaLearn에서 LLM에게 빈칸 문항과 문항 유형 라벨을 함께 받았는데, 라벨을 직접 확인해 보니 13개 중 6개가
+> 실제와 달랐습니다(정의문을 그대로 옮겼는데 "상황"이라고 신고). 라벨을 믿지 않고 이 판정기로 재니 19개 중 12개가
+> 정의문을 되읽는 문항이었습니다.
+
+입력은 `{ question, definition }` 객체의 JSON 배열입니다(`id`는 선택).
+
+```json
+[
+  {
+    "id": "q1",
+    "question": "어떤 팀이 ... 설계 방식으로 일한다면 ____ 다.",
+    "definition": "절차 지향 방식으로 최상위 컴포넌트를 먼저 설계한 뒤 하위 기능을 부여하는 설계 방법"
+  }
+]
+```
+
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--threshold` | `0.6` | 겹침이 이 값 **이상**이면 copied |
+| `--blank` | `____` | 문항의 빈칸 표시. 공백으로 바꾼 뒤 잽니다 |
+| `--max-copied` | `0` | 허용할 copied 개수. 넘으면 종료 코드 1 |
+| `--json` | — | 기계용 출력 (validate와 같은 규약) |
+
+`0.6`은 MetaLearn 데이터의 실측 분포에서 고른 값입니다. **데이터가 바뀌면 다시 정해야 합니다**
+([docs/DECISIONS.md](docs/DECISIONS.md) 14절).
+
+### 예시 실행
+
+```bash
+node dist/cli.js overlap examples/questions.json
+```
+
+```
+문항 2개 — copied 1, ok 1, unmeasurable 0
+겹침 비율 — 중앙값 0.52, 최댓값 0.97 (잰 문항 2개)
+copied 문항 1개 (threshold 0.60):
+  q1  0.97  어떤 팀이 절차 지향 방식으로 최상위 컴포넌트를 먼저 설계한 뒤 하위 기…
+실패: copied 1개가 허용치 0개를 넘었습니다
+```
+
+종료 코드는 `1`입니다. 한 건까지 허용하면 `0`이 됩니다.
+
+```bash
+node dist/cli.js overlap examples/questions.json --max-copied 1
+```
+
+```
+...
+통과: copied 1개 (허용치 1개)
+```
+
+`--json`은 CI에서 쓰는 형식입니다.
+
+```bash
+node dist/cli.js overlap examples/questions.json --json
+```
+
+```json
+{
+  "ok": false,
+  "input": "examples/questions.json",
+  "threshold": 0.6,
+  "maxCopied": 0,
+  "counts": { "total": 2, "copied": 1, "ok": 1, "unmeasurable": 0 },
+  "ratio": { "median": 0.5152, "max": 0.9697 },
+  "items": [
+    { "index": 0, "id": "q1", "status": "copied", "ratio": 0.9697 },
+    { "index": 1, "id": "q2", "status": "ok", "ratio": 0.0606 }
+  ]
+}
+```
+
+잴 수 없는 문항(정의문이나 문항이 비어 있음)은 `unmeasurable`로 세고 **copied로 강등하지 않습니다**.
+
 ## 개발 명령어
 
 | 명령 | 설명 |
@@ -174,12 +264,15 @@ JSON Schema 전체가 아니라 아래 부분집합만 지원하며, **모르는
 src/
   cli.ts                 # 인자 파싱·실제 fs/process 연결 (Node 전용 진입점)
   commands/
+    io.ts                # 명령이 보는 io 인터페이스와 결과 타입
     validate.ts          # validate 명령 본체 (io를 주입받아 결과 문자열을 반환)
+    overlap.ts           # overlap 명령 본체
     version.ts           # package.json 읽기
   core/                  # 순수 로직 (Node API에 의존하지 않음)
     extract-json.ts      # 응답 텍스트에서 첫 JSON 블록 꺼내기
     schema.ts            # JSON Schema 부분집합 → Schema 타입
     validate.ts          # 값 검사 (오류를 모두 모아 반환)
+    overlap.ts           # 정의문 복사 판정 (2-gram 겹침)
     help.ts, json.ts     # 도움말 텍스트, JSON 헬퍼
 test/                    # Vitest 테스트
 examples/                # 예시 스키마와 LLM 응답 샘플
