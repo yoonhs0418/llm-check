@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["score", "feedback", "keywords"],
+  "properties": {
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "feedback": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "keywords": {
+      "type": "array",
+      "maxItems": 5,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "level": { "type": "string", "enum": ["low", "mid", "high"] }
+  }
+}

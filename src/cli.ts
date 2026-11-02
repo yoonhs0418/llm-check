@@ -1,5 +1,9 @@
+import { readFile } from "node:fs/promises";
+import { text } from "node:stream/consumers";
 import { parseArgs } from "node:util";
 
+import { runValidate } from "./commands/validate.js";
+import type { ValidateIo } from "./commands/validate.js";
 import { readPackageVersion } from "./commands/version.js";
 import { renderHelp } from "./core/help.js";
 
@@ -10,16 +14,17 @@ import { renderHelp } from "./core/help.js";
  */
 const packageJsonUrl = new URL("../package.json", import.meta.url);
 
-function fail(message: string): never {
-  console.error(`llm-check: ${message}`);
-  console.error("");
-  console.error(renderHelp());
-  process.exit(1);
-}
+/** 실제 파일 시스템·표준 입력에 연결한 io. 명령 로직(src/commands)은 이 인터페이스만 본다. */
+const nodeIo: ValidateIo = {
+  readFile: (path) => readFile(path, "utf8"),
+  readStdin: () => text(process.stdin),
+};
 
-function parseCliArgs(): { help: boolean; version: boolean } {
+/** 전역 인자(--help / --version) 해석. 실패하면 오류 메시지 문자열을 돌려준다. */
+function parseGlobalArgs(args: readonly string[]): { help: boolean; version: boolean } | string {
   try {
     const { values } = parseArgs({
+      args: [...args],
       options: {
         help: { type: "boolean", short: "h", default: false },
         version: { type: "boolean", short: "v", default: false },
@@ -29,15 +34,33 @@ function parseCliArgs(): { help: boolean; version: boolean } {
     });
     return { help: values.help, version: values.version };
   } catch (error: unknown) {
-    fail(error instanceof Error ? error.message : "인자를 해석할 수 없습니다.");
+    return error instanceof Error ? error.message : "인자를 해석할 수 없습니다.";
   }
 }
 
-const args = parseCliArgs();
+const argv = process.argv.slice(2);
 
-if (args.version && !args.help) {
-  console.log(await readPackageVersion(packageJsonUrl));
+// process.exit()를 쓰지 않고 exitCode만 설정한다.
+// 파이프로 출력할 때 exit()가 쓰기 중인 stdout을 잘라먹을 수 있다.
+if (argv[0] === "validate") {
+  const result = await runValidate(argv.slice(1), nodeIo);
+  if (result.stdout !== "") {
+    process.stdout.write(result.stdout);
+  }
+  if (result.stderr !== "") {
+    process.stderr.write(result.stderr);
+  }
+  process.exitCode = result.exitCode;
 } else {
-  // 인자가 없을 때도 도움말을 보여준다(아직 기본 동작이 없는 단계이므로).
-  console.log(renderHelp());
+  const parsed = parseGlobalArgs(argv);
+
+  if (typeof parsed === "string") {
+    process.stderr.write(`llm-check: ${parsed}\n\n${renderHelp()}\n`);
+    process.exitCode = 2;
+  } else if (parsed.version && !parsed.help) {
+    process.stdout.write(`${await readPackageVersion(packageJsonUrl)}\n`);
+  } else {
+    // 인자가 없을 때도 도움말을 보여준다.
+    process.stdout.write(`${renderHelp()}\n`);
+  }
 }
