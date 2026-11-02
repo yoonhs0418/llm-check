@@ -1,0 +1,32 @@
+{
+  "name": "llm-check",
+  "version": "0.1.0",
+  "description": "LLM이 만들어 낸 출력 파일을 오프라인에서 검사하는 CLI (프로젝트 뼈대 단계)",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "llm-check": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run lint && npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
+    "tsup": "^9.0.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  }
+}
